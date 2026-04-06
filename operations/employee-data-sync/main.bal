@@ -28,7 +28,7 @@ public function main() returns error? {
     employee:Employee[] employees = check employee:getEmployees(filters =
             {employeeStatus: [employee:EmployeeStatusActive, employee:EmployeeStatusMarkedLeaver]});
     log:printInfo("Successfully fetched employee data. Total employees: " + employees.length().toString());
-    int count = 1;
+    int count = 0;
     foreach employee:Employee employee in employees {
         if count % 100 == 0 {
             log:printInfo(string `Processed ${count} employees so far...`);
