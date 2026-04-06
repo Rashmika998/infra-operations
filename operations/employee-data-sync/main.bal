@@ -36,43 +36,29 @@ public function main() returns error? {
             // Wait for 1 minute after processing every 100 employees to avoid hitting rate limits.
             runtime:sleep(60);
         }
-        scim:User[] userResult = check scim:searchUser(employee.workEmail);
+        scim:User[] userResult = check scim:searchUser(employee.workEmail.toLowerAscii());
         if userResult.length() == 0 {
             log:printInfo(string `User with email ${employee.workEmail} does not exist in Asgardeo. Skipping...`);
             count += 1;
             continue;
         }
         scim:User user = userResult[0];
-        if user.urn\:scim\:wso2\:schema?.jobtitle is () && user.profileUrl is () {
-            scim:User|error updatedUser = scim:updateUser(
-                    {jobTitle: employee.jobRole ?: "", profileUrl: employee.employeeThumbnail ?: ""}, user.id);
+        boolean jobTitleNeedsUpdate = user.urn\:scim\:wso2\:schema?.jobtitle != employee.jobRole;
+        boolean profileUrlNeedsUpdate = user.profileUrl != employee.employeeThumbnail;
+
+        if jobTitleNeedsUpdate || profileUrlNeedsUpdate {
+            scim:UserUpdatePayload updatePayload = {};
+            if jobTitleNeedsUpdate {
+                updatePayload.jobTitle = employee.jobRole ?: "";
+            }
+            if profileUrlNeedsUpdate {
+                updatePayload.profileUrl = employee.employeeThumbnail ?: "";
+            }
+            scim:User|error updatedUser = scim:updateUser(updatePayload, user.id);
             if updatedUser is error {
                 log:printError(string `Failed to update user: ${user.userName} in Asgardeo.`, updatedUser);
             } else {
-                if updatedUser.profileUrl == employee.employeeThumbnail &&
-                    updatedUser.urn\:scim\:wso2\:schema?.jobtitle == employee.jobRole {
-                    log:printDebug(string `Successfully updated user: ${user.userName} in Asgardeo.`);
-                }
-            }
-        } else if user.urn\:scim\:wso2\:schema?.jobtitle != employee.jobRole {
-            scim:User|error updatedUser = scim:updateUser({jobTitle: employee.jobRole ?: ""}, user.id);
-            if updatedUser is error {
-                log:printError(string `Failed to update job title for user: ${user.userName} in Asgardeo.`,
-                        updatedUser);
-            } else {
-                if updatedUser.urn\:scim\:wso2\:schema?.jobtitle == employee.jobRole {
-                    log:printDebug(string `Successfully updated job title for user: ${user.userName} in Asgardeo.`);
-                }
-            }
-        } else if user.profileUrl != employee.employeeThumbnail {
-            scim:User|error updatedUser = scim:updateUser({profileUrl: employee.employeeThumbnail ?: ""}, user.id);
-            if updatedUser is error {
-                log:printError(string `Failed to update profile URL for user: ${user.userName} in Asgardeo.`,
-                        updatedUser);
-            } else {
-                if updatedUser.profileUrl == employee.employeeThumbnail {
-                    log:printDebug(string `Successfully updated profile URL for user: ${user.userName} in Asgardeo.`);
-                }
+                log:printDebug(string `Successfully updated user: ${user.userName} in Asgardeo.`);
             }
         }
         count += 1;
