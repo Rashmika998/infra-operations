@@ -233,15 +233,6 @@ func (c *Client) SendEmail(ctx context.Context, msg *Message) error {
 	if len(batches) == 0 {
 		return errors.New(errNoRecipients)
 	}
-	raws := make([][]byte, len(batches))
-	for i := range batches {
-		raw, err := buildMIMEMessage(&batches[i])
-		if err != nil {
-			return fmt.Errorf(errFmtBuildMIME, err)
-		}
-		raws[i] = raw
-	}
-
 	sc, cleanup, err := c.dialAndAuth(ctx)
 	if err != nil {
 		return err
@@ -260,7 +251,15 @@ func (c *Client) SendEmail(ctx context.Context, msg *Message) error {
 	// stop the remaining ones; all failures are returned together.
 	var errs []error
 	for i, batch := range batches {
-		if err := sendBatch(sc, envelopeFrom, envelopeAddrs(&batch), raws[i]); err != nil {
+		// Build each message just before sending it so only one copy of the
+		// attachments' MIME encoding is held at a time. The batches differ only
+		// in their recipient headers, so a build error is the same for every
+		// batch and surfaces on the first one, before anything is sent.
+		raw, err := buildMIMEMessage(&batch)
+		if err != nil {
+			return errors.Join(append(errs, fmt.Errorf(errFmtBuildMIME, err))...)
+		}
+		if err := sendBatch(sc, envelopeFrom, envelopeAddrs(&batch), raw); err != nil {
 			errs = append(errs, fmt.Errorf(errFmtBatch, i+1, err))
 			// A failed transaction can leave the session mid-command; reset
 			// it so the next batch starts clean. If the connection is dead
